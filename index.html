@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reporte Campaña WhatsApp</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f3; color: #1a1a18; min-height: 100vh; padding: 2rem; }
+  .dash { max-width: 1100px; margin: 0 auto; }
+  .header { margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .header h1 { font-size: 22px; font-weight: 600; color: #1a1a18; }
+  .header p { font-size: 13px; color: #5f5e5a; margin-top: 4px; }
+  .refresh-btn { background: #378ADD; color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 500; }
+  .refresh-btn:hover { background: #185FA5; }
+  .status { font-size: 12px; color: #5f5e5a; margin-top: 4px; }
+  .status.error { color: #A32D2D; }
+  .loading { text-align: center; padding: 3rem; font-size: 14px; color: #888780; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .kpi { background: #fff; border-radius: 10px; padding: 1.1rem 1.25rem; border: 0.5px solid #d3d1c7; }
+  .kpi-label { font-size: 12px; color: #888780; margin-bottom: 6px; }
+  .kpi-value { font-size: 26px; font-weight: 600; color: #1a1a18; }
+  .kpi-sub { font-size: 12px; color: #888780; margin-top: 4px; }
+  .filter-row { display: flex; gap: 12px; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; background: #fff; padding: 12px 16px; border-radius: 10px; border: 0.5px solid #d3d1c7; }
+  .filter-row label { font-size: 13px; color: #5f5e5a; font-weight: 500; }
+  select { font-size: 13px; padding: 7px 12px; border-radius: 8px; border: 0.5px solid #b4b2a9; background: #f5f5f3; color: #1a1a18; cursor: pointer; outline: none; }
+  select:focus { border-color: #378ADD; }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 1.5rem; }
+  .chart-box { background: #fff; border: 0.5px solid #d3d1c7; border-radius: 12px; padding: 1.2rem; }
+  .chart-box h3 { font-size: 13px; font-weight: 500; color: #5f5e5a; margin-bottom: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 11px; color: #5f5e5a; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .section-title { font-size: 12px; font-weight: 600; color: #888780; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .table-box { background: #fff; border: 0.5px solid #d3d1c7; border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #f5f5f3; padding: 10px 14px; text-align: left; font-weight: 600; font-size: 11px; color: #888780; border-bottom: 0.5px solid #d3d1c7; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 10px 14px; border-bottom: 0.5px solid #f1efe8; color: #1a1a18; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f5f5f3; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #EAF3DE; color: #3B6D11; }
+  .badge-amber { background: #FAEEDA; color: #854F0B; }
+  .badge-red { background: #FCEBEB; color: #A32D2D; }
+  .footer { text-align: center; font-size: 12px; color: #b4b2a9; margin-top: 2rem; }
+  #content { display: none; }
+  @media (max-width: 640px) {
+    body { padding: 1rem; }
+    .chart-row { grid-template-columns: 1fr; }
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="dash">
+
+  <div class="header">
+    <div>
+      <h1>Reporte campaña WhatsApp</h1>
+      <p id="subtitle">Cargando datos...</p>
+    </div>
+    <div style="text-align:right;">
+      <button class="refresh-btn" onclick="loadData()">Actualizar datos</button>
+      <div class="status" id="statusMsg"></div>
+    </div>
+  </div>
+
+  <div id="loadingMsg" class="loading">Cargando datos desde Google Sheets...</div>
+
+  <div id="content">
+    <div class="filter-row">
+      <label>Semana:</label>
+      <select id="semFilter" onchange="update()">
+        <option value="all">Todas las semanas</option>
+      </select>
+      <label>Asesor:</label>
+      <select id="aseFilter" onchange="update()">
+        <option value="all">Todos</option>
+      </select>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">Inversión total</div><div class="kpi-value" id="kpi1">—</div><div class="kpi-sub">vs presupuesto sugerido</div></div>
+      <div class="kpi"><div class="kpi-label">Mensajes enviados</div><div class="kpi-value" id="kpi2">—</div><div class="kpi-sub">total WhatsApp</div></div>
+      <div class="kpi"><div class="kpi-label">Costo promedio / msg</div><div class="kpi-value" id="kpi3">—</div><div class="kpi-sub">COP por mensaje</div></div>
+      <div class="kpi"><div class="kpi-label">% ejecución budget</div><div class="kpi-value" id="kpi4">—</div><div class="kpi-sub">inversión / sugerida</div></div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-box">
+        <h3>Inversión real vs sugerida por asesor</h3>
+        <div class="legend">
+          <span><span class="legend-dot" style="background:#378ADD"></span>Sugerida</span>
+          <span><span class="legend-dot" style="background:#1D9E75"></span>Real</span>
+        </div>
+        <div style="position:relative;height:260px;"><canvas id="barChart"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <h3>Mensajes por asesor</h3>
+        <div class="legend"><span><span class="legend-dot" style="background:#D4537E"></span>Mensajes WA</span></div>
+        <div style="position:relative;height:260px;"><canvas id="msgChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-box">
+        <h3>Costo por mensaje por asesor (COP)</h3>
+        <div class="legend"><span><span class="legend-dot" style="background:#BA7517"></span>Costo / msg</span></div>
+        <div style="position:relative;height:220px;"><canvas id="costoChart"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <h3>Evolución semanal — inversión total</h3>
+        <div class="legend"><span><span class="legend-dot" style="background:#7F77DD"></span>Inversión</span></div>
+        <div style="position:relative;height:220px;"><canvas id="lineChart"></canvas></div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1.5rem;">
+      <div class="section-title">Detalle por asesor y semana</div>
+      <div class="table-box">
+        <table>
+          <thead>
+            <tr>
+              <th>Asesor</th><th>Semana</th><th>Inv. real</th><th>Mensajes</th><th>Costo / msg</th><th>% ejecución</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Generado con Claude · Anthropic</div>
+</div>
+
+<script>
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTXt-stR7KlkwioTHHuo1hqWOxuPZMDslIBKD1ykC5_Co-dbl6w9rd15azYxh31h0lhteOqYpRiYTsD/pub?gid=0&single=true&output=csv';
+
+let RAW = [];
+let barC, msgC, costoC, lineC;
+
+function fmt(n){ return Math.round(n).toLocaleString('es-CO'); }
+
+function parseCSV(text){
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h=>h.trim().replace(/"/g,''));
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    const cols = lines[i].split(',').map(c=>c.trim().replace(/"/g,''));
+    if(cols.length < 4) continue;
+    const obj = {};
+    headers.forEach((h,idx)=>{ obj[h]=cols[idx]||''; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function semKey(label){
+  const l = label.toUpperCase();
+  if(l.includes('23') || l.includes('29')) return 'sem1';
+  if(l.includes('30') || l.includes('5')) return 'sem2';
+  if(l.includes('6') || l.includes('9')) return 'sem3';
+  return label;
+}
+
+function loadData(){
+  document.getElementById('loadingMsg').style.display='block';
+  document.getElementById('content').style.display='none';
+  document.getElementById('statusMsg').textContent='Actualizando...';
+
+  fetch(CSV_URL)
+    .then(r=>{ if(!r.ok) throw new Error('Error al cargar'); return r.text(); })
+    .then(text=>{
+      const rows = parseCSV(text);
+      RAW = [];
+
+      rows.forEach(r=>{
+        const semLabel = r['SEMANA']||'';
+        const asesor = r['ASESOR']||'';
+        const sug = parseFloat(r['INVERSIÓN SUGERIDA APROXIMADA'])||0;
+        const inv = parseFloat(r['INVERSIÓN TOTAL'])||0;
+        const msg = parseFloat(r['MENSAJES A WHATSAPP'])||0;
+        const costo = parseFloat(r['COSTO APROX MENSAJE'])||0;
+
+        if(!asesor || !semLabel || semLabel==='SEMANA') return;
+        if(isNaN(inv) || inv===0) return;
+
+        RAW.push({
+          sem: semKey(semLabel),
+          label: semLabel,
+          asesor: asesor,
+          sug: sug,
+          inv: inv,
+          msg: msg,
+          costo: costo
+        });
+      });
+
+      const semanas = [...new Set(RAW.map(d=>d.label))];
+      const asesores = [...new Set(RAW.map(d=>d.asesor))];
+
+      const semSelect = document.getElementById('semFilter');
+      semSelect.innerHTML = '<option value="all">Todas las semanas</option>';
+      semanas.forEach(s=>{
+        const o=document.createElement('option');
+        o.value=semKey(s); o.textContent=s;
+        semSelect.appendChild(o);
+      });
+
+      const aseSelect = document.getElementById('aseFilter');
+      aseSelect.innerHTML = '<option value="all">Todos</option>';
+      asesores.forEach(a=>{
+        const o=document.createElement('option');
+        o.value=a; o.textContent=a;
+        aseSelect.appendChild(o);
+      });
+
+      const now = new Date().toLocaleString('es-CO');
+      document.getElementById('subtitle').textContent = 'Datos actualizados el ' + now;
+      document.getElementById('statusMsg').textContent = 'Última actualización: ' + now;
+      document.getElementById('statusMsg').className = 'status';
+      document.getElementById('loadingMsg').style.display='none';
+      document.getElementById('content').style.display='block';
+
+      update();
+    })
+    .catch(err=>{
+      document.getElementById('loadingMsg').style.display='none';
+      document.getElementById('statusMsg').textContent = 'Error al cargar datos. Verifica que el link de Google Sheets esté publicado.';
+      document.getElementById('statusMsg').className = 'status error';
+      document.getElementById('content').style.display='block';
+    });
+}
+
+function filtered(){
+  const sem = document.getElementById('semFilter').value;
+  const ase = document.getElementById('aseFilter').value;
+  return RAW.filter(d=>(sem==='all'||d.sem===sem)&&(ase==='all'||d.asesor===ase));
+}
+
+function update(){
+  const data = filtered();
+  const totalInv = data.reduce((s,d)=>s+d.inv,0);
+  const totalSug = data.reduce((s,d)=>s+d.sug,0);
+  const totalMsg = data.reduce((s,d)=>s+d.msg,0);
+  const avgCosto = totalMsg>0 ? totalInv/totalMsg : 0;
+  const pctExec = totalSug>0 ? (totalInv/totalSug*100) : 0;
+
+  document.getElementById('kpi1').textContent = '$'+fmt(totalInv);
+  document.getElementById('kpi2').textContent = fmt(totalMsg);
+  document.getElementById('kpi3').textContent = '$'+fmt(avgCosto);
+  document.getElementById('kpi4').textContent = pctExec.toFixed(1)+'%';
+
+  const byAse={};
+  data.forEach(d=>{
+    if(!byAse[d.asesor]) byAse[d.asesor]={sug:0,inv:0,msg:0};
+    byAse[d.asesor].sug+=d.sug;
+    byAse[d.asesor].inv+=d.inv;
+    byAse[d.asesor].msg+=d.msg;
+  });
+  const aseLabels = Object.keys(byAse);
+  const shortLabels = aseLabels.map(a=>a.length>11?a.slice(0,11)+'…':a);
+  const sugVals = aseLabels.map(a=>byAse[a].sug);
+  const invVals = aseLabels.map(a=>byAse[a].inv);
+  const msgVals = aseLabels.map(a=>byAse[a].msg);
+  const costoVals = aseLabels.map(a=>byAse[a].msg>0?Math.round(byAse[a].inv/byAse[a].msg):0);
+
+  if(barC) barC.destroy();
+  barC = new Chart(document.getElementById('barChart'),{
+    type:'bar',
+    data:{labels:shortLabels,datasets:[
+      {label:'Sugerida',data:sugVals,backgroundColor:'#378ADD',borderRadius:3},
+      {label:'Real',data:invVals,backgroundColor:'#1D9E75',borderRadius:3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:11},autoSkip:false,maxRotation:45}},y:{ticks:{callback:v=>'$'+fmt(v)}}}}
+  });
+
+  if(msgC) msgC.destroy();
+  msgC = new Chart(document.getElementById('msgChart'),{
+    type:'bar',
+    data:{labels:shortLabels,datasets:[{label:'Mensajes',data:msgVals,backgroundColor:'#D4537E',borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:11},autoSkip:false,maxRotation:45}}}}
+  });
+
+  if(costoC) costoC.destroy();
+  costoC = new Chart(document.getElementById('costoChart'),{
+    type:'bar',
+    data:{labels:shortLabels,datasets:[{label:'Costo/msg',data:costoVals,backgroundColor:'#BA7517',borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:11},autoSkip:false,maxRotation:45}},y:{ticks:{callback:v=>'$'+fmt(v)}}}}
+  });
+
+  const semanas=['sem1','sem2','sem3'];
+  const semLabels=['23–29 Mar','30 Mar–5 Abr','6–9 Abr'];
+  const lineVals = semanas.map(s=>data.filter(d=>d.sem===s).reduce((t,d)=>t+d.inv,0));
+  if(lineC) lineC.destroy();
+  lineC = new Chart(document.getElementById('lineChart'),{
+    type:'line',
+    data:{labels:semLabels,datasets:[{label:'Inversión',data:lineVals,borderColor:'#7F77DD',backgroundColor:'rgba(127,119,221,0.1)',pointBackgroundColor:'#7F77DD',tension:0.3,fill:true}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+fmt(v)}}}}
+  });
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML='';
+  data.forEach(d=>{
+    const pct = d.sug>0 ? d.inv/d.sug*100 : null;
+    const badge = pct===null
+      ? '<span class="badge badge-amber">Sin ref.</span>'
+      : pct>=100 ? '<span class="badge badge-green">'+pct.toFixed(0)+'%</span>'
+      : pct>=75 ? '<span class="badge badge-amber">'+pct.toFixed(0)+'%</span>'
+      : '<span class="badge badge-red">'+pct.toFixed(0)+'%</span>';
+    tbody.innerHTML+=`<tr>
+      <td><strong>${d.asesor}</strong></td>
+      <td style="color:#888780">${d.label}</td>
+      <td>$${fmt(d.inv)}</td>
+      <td>${fmt(d.msg)}</td>
+      <td>$${fmt(d.costo)}</td>
+      <td>${badge}</td>
+    </tr>`;
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
